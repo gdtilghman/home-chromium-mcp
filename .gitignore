@@ -1,0 +1,19 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+docker-compose.yml
+docker-compose.yaml
+
+# Persistent browser data and reusable login state
+chromium-config/
+browser-data/
+*-state.json
+**/*-state.json
+
+# Python and editor noise
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,85 @@
+# Home Browser example
+#
+# Copy this file to docker-compose.yml, copy .env.example to .env,
+# replace the allowed-host placeholders below, and review SECURITY.md
+# before starting the project.
+#
+# IMPORTANT:
+# - Do not publish a completed docker-compose.yml if it contains local
+#   hostnames or addresses you consider private.
+# - Do not add a host-port mapping for 9222. CDP is intentionally reachable
+#   only through the shared container network namespace.
+
+name: home-browser
+
+services:
+  chromium:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: home-chromium
+    restart: unless-stopped
+    labels:
+      # Optional: prevent Watchtower from updating this browser unattended.
+      - "com.centurylinklabs.watchtower.enable=false"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - CUSTOM_USER=${CHROMIUM_GUI_USER}
+      - PASSWORD=${CHROMIUM_GUI_PASSWORD}
+      # CHROME_CLI is passed to Chromium as one argument string.
+      # The explicit user-data directory keeps the working profile under
+      # the persistent /config volume and avoids Chromium's default
+      # profile directory for remote debugging.
+      - >-
+        CHROME_CLI=
+        --remote-debugging-port=9222
+        --remote-debugging-address=0.0.0.0
+        --user-data-dir=/config/chromium-profile
+        --no-first-run
+        https://example.com
+    volumes:
+      - ./chromium-config:/config
+    ports:
+      # LinuxServer Chromium HTTP GUI. Prefer HTTPS for direct use; this
+      # HTTP port is mainly useful behind a trusted reverse proxy.
+      - "13000:3000"
+      # LinuxServer Chromium HTTPS GUI (self-signed by default).
+      - "13001:3001"
+      # Scrapling listens on port 8000 inside the shared network
+      # namespace, so its host mapping is declared on this service.
+      - "18000:8000"
+    shm_size: "1gb"
+
+  home-browser:
+    image: ghcr.io/d4vinci/scrapling:latest
+    container_name: home-browser
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    depends_on:
+      - chromium
+    # Share Chromium's network namespace so this service can reach CDP at
+    # 127.0.0.1:9222 without publishing CDP on the Docker host.
+    network_mode: "service:chromium"
+    environment:
+      - SCRAPLING_MCP_AUTH_TOKEN=${SCRAPLING_MCP_AUTH_TOKEN}
+    command:
+      - mcp
+      - --http
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      # Replace each value with an exact hostname-or-private-IP:18000
+      # combination the agent will use. Delete entries you do not need.
+      - --allowed-host
+      - "<NAS_TAILSCALE_HOSTNAME>:18000"
+      - --allowed-host
+      - "<NAS_LAN_HOSTNAME>:18000"
+      - --allowed-host
+      - "<NAS_PRIVATE_IP>:18000"
+      - --allowed-host
+      - "localhost:18000"
+    volumes:
+      - ./browser-data:/data
+    shm_size: "2gb"
